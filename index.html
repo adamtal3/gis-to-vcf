@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>ממיר אקסל ל-vCard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { direction: rtl; }
+    #fieldsWrapper { display: none; }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f9f9f9;
+      color: #333;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+    }
+    h2 {
+      text-align: center;
+      color: #0077cc;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    input[type="file"], input[type="text"], select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #0077cc;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover {
+      background-color: #005fa3;
+    }
+  </style>
+</head>
+<body>
+  <h2>מחולל vCard מאקסל</h2>
+  <input type="file" id="fileInput" accept=".xlsx, .xls" />
+  <br/><br/>
+  <div id="fieldsWrapper">
+    <div style="display: flex; gap: 10px;">
+      <label style="flex:1;">קידומת לשם: <input type="text" id="prefix" value="מיקום" /></label>
+      <label for="address" style="flex:1;">עמודת כתובת:
+        <select id="address"></select>
+      </label>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <label for="firstName" style="flex:1;">שם פרטי:
+        <select id="firstName"></select>
+      </label>
+      <label for="lastName" style="flex:1;">שם משפחה:
+        <select id="lastName"></select>
+      </label>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <label for="phone1" style="flex:1;">עמודת טלפון 1:
+        <select id="phone1"></select>
+      </label>
+      <label for="phone2" style="flex:1;">עמודת טלפון 2:
+        <select id="phone2"></select>
+      </label>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <label for="comment" style="flex:1;">עמודת הערה:
+        <select id="comment"></select>
+      </label>
+      <div style="flex:1;"></div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <label for="lat" style="flex:1;">עמודת קו רוחב:
+        <select id="lat"></select>
+      </label>
+      <label for="lon" style="flex:1;">עמודת קו אורך:
+        <select id="lon"></select>
+      </label>
+    </div>
+  </div>
+  <br/>
+  <button id="generateBtn" onclick="generateVCF()" disabled>צור קובץ vCard (.vcf)</button>
+
+  <script>
+    let sheetData = [];
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        // Get header row as array
+        const headerRow = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0];
+        // Get data as array of objects
+        sheetData = XLSX.utils.sheet_to_json(worksheet);
+        populateColumnSelectorsFromHeader(headerRow);
+        autoSelectColumns(Object.fromEntries(headerRow.map(h => [h, h])));
+        document.getElementById('fieldsWrapper').style.display = 'block';
+        document.getElementById('generateBtn').disabled = false;
+      };
+      reader.readAsArrayBuffer(e.target.files[0]);
+    });
+
+    // Enable drag & drop for XLSX files anywhere on the page
+    window.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    window.addEventListener('drop', function(e) {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          document.getElementById('fileInput').files = e.dataTransfer.files;
+          // Trigger the change event manually
+          const event = new Event('change', { bubbles: true });
+          document.getElementById('fileInput').dispatchEvent(event);
+        } else {
+          alert('יש לגרור קובץ Excel בלבד (xlsx או xls)');
+        }
+      }
+    });
+
+    function populateColumnSelectorsFromHeader(header) {
+      const selects = ['address', 'firstName', 'lastName', 'phone1', 'phone2', 'comment', 'lat', 'lon'];
+      selects.forEach(id => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        select.innerHTML = '';
+        // Add 'התעלם' as the first/default option
+        const ignoreOpt = document.createElement('option');
+        ignoreOpt.value = '';
+        ignoreOpt.textContent = 'התעלם';
+        select.appendChild(ignoreOpt);
+        header.forEach(key => {
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = key;
+          select.appendChild(opt);
+        });
+        select.selectedIndex = 0;
+      });
+    }
+
+    function autoSelectColumns(headers) {
+      // Fuzzy match fields by similarity to common Hebrew/English column names
+      const mapping = {
+        address: ['addres', 'כתובת'],
+        firstName: ['first', 'שם'],
+        lastName: ['last', 'משפחה'],
+        phone1: ['phone', 'phone1', 'טלפון', 'cellular', 'cellular1'],
+        phone2: ['phone2', 'טלפון 2', 'cellular2', 'celullar2', 'סלולרי 2'],
+        comment: ['comment', 'הערה', 'הערות', 'descr'],
+        lat: ['latitude', 'קו רוחב', 'y'],
+        lon: ['longitude', 'קו אורך', 'x']
+      };
+      function normalize(str) {
+        return (str||'').toString().trim().toLowerCase().replace(/[_\-\s]+/g, '');
+      }
+      function fuzzyScore(a, b) {
+        a = normalize(a); b = normalize(b);
+        if (a === b) return 100;
+        if (a.includes(b) || b.includes(a)) return 80;
+        let score = 0;
+        let minLen = Math.min(a.length, b.length);
+        for (let i = 0; i < minLen; i++) if (a[i] === b[i]) score++;
+        return score * 100 / Math.max(a.length, b.length, 1);
+      }
+      // Special logic for lat/lon: prioritize 'latitude'/'longitude', then קו רוחב/קו אורך, then y/x
+      const latPriority = ['latitude', 'קו רוחב', 'y'];
+      const lonPriority = ['longitude', 'קו אורך', 'x'];
+      // Latitude
+      let bestLatKey = null, bestLatScore = 0;
+      for (const possible of latPriority) {
+        for (const key in headers) {
+          const score = fuzzyScore(key, possible);
+          if (score > bestLatScore) {
+            bestLatScore = score;
+            bestLatKey = key;
+          }
+          // עצור מיד אם יש התאמה מושלמת ל-latitude או קו רוחב
+          if (score === 100 && (possible === 'latitude' || possible === 'קו רוחב')) {
+            document.getElementById('lat').value = key;
+            bestLatKey = null; // כדי שלא ידרוס אח"כ
+            break;
+          }
+        }
+        if (bestLatKey === null) break; // כבר בחרנו התאמה מושלמת
+      }
+      if (bestLatKey && bestLatScore > 60) document.getElementById('lat').value = bestLatKey;
+      // Longitude
+      let bestLonKey = null, bestLonScore = 0;
+      for (const possible of lonPriority) {
+        for (const key in headers) {
+          const score = fuzzyScore(key, possible);
+          if (score > bestLonScore) {
+            bestLonScore = score;
+            bestLonKey = key;
+          }
+          // עצור מיד אם יש התאמה מושלמת ל-longitude או קו אורך
+          if (score === 100 && (possible === 'longitude' || possible === 'קו אורך')) {
+            document.getElementById('lon').value = key;
+            bestLonKey = null;
+            break;
+          }
+        }
+        if (bestLonKey === null) break;
+      }
+      if (bestLonKey && bestLonScore > 60) document.getElementById('lon').value = bestLonKey;
+      // All other fields
+      for (const field in mapping) {
+        if (field === 'lat' || field === 'lon') continue;
+        const select = document.getElementById(field);
+        if (!select) continue;
+        let bestKey = null, bestScore = 0;
+        for (const key in headers) {
+          for (const possible of mapping[field]) {
+            const score = fuzzyScore(key, possible);
+            if (score > bestScore) {
+              bestScore = score;
+              bestKey = key;
+            }
+          }
+        }
+        if (bestScore > 60 && bestKey) select.value = bestKey;
+      }
+    }
+
+    function generateVCF() {
+      const prefix = document.getElementById('prefix').value;
+      const addressCol = document.getElementById('address').value;
+      const firstNameCol = document.getElementById('firstName').value;
+      const lastNameCol = document.getElementById('lastName').value;
+      const phone1Col = document.getElementById('phone1').value;
+      const phone2Col = document.getElementById('phone2').value;
+      const commentCol = document.getElementById('comment').value;
+      const latCol = document.getElementById('lat').value;
+      const lonCol = document.getElementById('lon').value;
+
+      let vcf = '';
+      for (const row of sheetData) {
+        const name = `${prefix} ${(row[firstNameCol] || '')} ${(row[lastNameCol] || '')}`.trim();
+        const tel1 = row[phone1Col] || '';
+        const tel2 = row[phone2Col] || '';
+        const comment = row[commentCol] || '';
+        const lat = row[latCol];
+        const lon = row[lonCol];
+
+        // Main address: prefer lat/lon if both exist
+        let adr = '';
+        let adr2 = '';
+        if (lat && lon) {
+          adr = `${lat} ${lon}`;
+
+          if (row[addressCol]) {
+            adr2 = row[addressCol];
+          }
+        } else {
+          adr = row[addressCol] || '';
+        }
+
+        vcf += `BEGIN:VCARD\nVERSION:3.0\nFN:${name}\n`;
+        if (tel1) vcf += `TEL;TYPE=CELL:${tel1}\n`;
+        if (tel2) vcf += `TEL;TYPE=CELL:${tel2}\n`;
+        if (adr) vcf += `ADR;TYPE=HOME:;;${adr};;;;\n`;
+        if (lat && lon) {
+          vcf += `URL:https://maps.google.com/?q=${lat},${lon}\n`;
+          vcf += `GEO:${lat};${lon}\n`;
+        }
+        if (adr2) vcf += `NOTE:${adr2}\n`;
+        if (comment) vcf += `NOTE:${comment}\n`;
+        vcf += `END:VCARD\n`;
+      }
+
+      const blob = new Blob([vcf], { type: 'text/vcard;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'contacts.vcf';
+      link.click();
+    }
+  </script>
+  <div style="position:fixed; bottom:0; left:0; width:100vw; text-align:center; color:#888; font-size:0.8em; padding:8px 0; z-index:1000;">
+    Made with ❤️ by Adam Tal
+  </div>
+</body>
+</html>
