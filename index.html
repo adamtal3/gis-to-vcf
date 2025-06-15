@@ -45,10 +45,35 @@
     button:hover {
       background-color: #005fa3;
     }
+    .explanation {
+      background: #eaf6ff;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 18px;
+      font-size: 1.05em;
+    }
+    .explanation b {
+      display: block;
+      margin-bottom: 8px;
+    }
+    .explanation ul {
+      margin-top: 6px;
+      margin-bottom: 6px;
+      padding-left: 20px;
+    }
   </style>
 </head>
 <body>
   <h2>מחולל vCard מאקסל</h2>
+  <div id="explanationBox" style="background:#eaf6ff; border-radius:8px; padding:14px 18px; margin-bottom:18px; font-size:1.05em;">
+    <b>הסבר:</b><br>
+    קובץ זה ממיר נתוני אקסל לקובץ vCard.<br>
+    <ul style="margin-top:6px; margin-bottom:6px;">
+      <li>יש לוודא שעמודות <b>קו אורך</b> ו-<b>קו רוחב</b> מכילות ערכים גלובליים (WGS84, לדוג' קואורדינטות GPS) ולא ערכים יחסיים לשכבת GIS.</li>
+      <li>קובץ הקלט חייב להיות בפורמט <b>xlsx</b> (אקסל).</li>
+      <li>ניתן לגרור ולשחרר את קובץ האקסל לכל מקום בדף.</li>
+    </ul>
+  </div>
   <input type="file" id="fileInput" accept=".xlsx, .xls" />
   <br/><br/>
   <div id="fieldsWrapper">
@@ -110,6 +135,7 @@
         autoSelectColumns(Object.fromEntries(headerRow.map(h => [h, h])));
         document.getElementById('fieldsWrapper').style.display = 'block';
         document.getElementById('generateBtn').disabled = false;
+        document.getElementById('explanationBox').style.display = 'none';
       };
       reader.readAsArrayBuffer(e.target.files[0]);
     });
